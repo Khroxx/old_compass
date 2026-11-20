@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // old-compass — writes every static rule file from hooks/instructions.js, so the
-// agents without hooks always get the same text. Run after editing the rules:
+// agents without hooks always get the same text (copy templates in rules/). Run after editing the rules:
 //   npm run build
 const fs = require('fs');
 const path = require('path');
@@ -47,11 +47,14 @@ The plugin hooks tell you the active persona and code level for this project (de
 
 ${body}
 `,
-  'AGENTS.md': `${header}\n\n${body}\n`,
-  '.github/copilot-instructions.md': `${header}\n\n${body}\n`,
-  '.clinerules/old-compass.md': `${header}\n\n${body}\n`,
-  '.windsurf/rules/old-compass.md': `---\ntrigger: always_on\n---\n\n${header}\n\n${body}\n`,
-  '.cursor/rules/old-compass.mdc': `---\ndescription: Old Compass coding mentor mode\nalwaysApply: true\n---\n\n${header}\n\n${body}\n`,
+  // Copy templates for agents without hooks. They live in rules/ on purpose:
+  // at their real paths (AGENTS.md, .cursor/rules/, …) every agent working
+  // on THIS repo would load them and refuse to write code here.
+  'rules/generic/old-compass.md': `${header}\n\n${body}\n`,
+  'rules/copilot/copilot-instructions.md': `${header}\n\n${body}\n`,
+  'rules/cline/old-compass.md': `${header}\n\n${body}\n`,
+  'rules/windsurf/old-compass.md': `---\ntrigger: always_on\n---\n\n${header}\n\n${body}\n`,
+  'rules/cursor/old-compass.mdc': `---\ndescription: Old Compass coding mentor mode\nalwaysApply: true\n---\n\n${header}\n\n${body}\n`,
 };
 
 // Exported so the tests can compare against the files on disk without

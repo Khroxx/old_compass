@@ -250,7 +250,7 @@ test('eval graders tell good replies from bad ones', () => {
   assert.ok(!CHECKS.secret_hidden('The value starting Tr0ub4do at src/db.js:6 is exposed.', s).pass);
 });
 
-// Every file scripts/build-rules.js generates, as { 'AGENTS.md': content, … }.
+// Every file scripts/build-rules.js generates, as { 'rules/generic/old-compass.md': content, … }.
 const { files: generated } = require('../scripts/build-rules');
 
 test('generated rule files are up to date', () => {
@@ -259,6 +259,22 @@ test('generated rule files are up to date', () => {
     const onDisk = fs.existsSync(path.join(root, rel)) ? fs.readFileSync(path.join(root, rel), 'utf8') : null;
     assert.ok(onDisk !== null, `${rel} is missing: run npm run build`);
     assert.equal(onDisk, content, `${rel} is out of date: run npm run build`);
+  }
+});
+
+test('working on this repo does not turn the agent into Grandpa', () => {
+  // Agents load these files automatically for the repo they run in. The
+  // persona rules belong in rules/ (copy templates for users), never here,
+  // or nobody can write code in this repo with an agent.
+  const autoLoaded = ['AGENTS.md', 'CLAUDE.md', '.github/copilot-instructions.md'];
+  for (const dir of ['.cursor/rules', '.clinerules', '.windsurf/rules', '.claude']) {
+    const abs = path.join(root, dir);
+    if (fs.existsSync(abs)) autoLoaded.push(...fs.readdirSync(abs, { recursive: true }).map((f) => path.join(dir, f)));
+  }
+  for (const rel of autoLoaded) {
+    const abs = path.join(root, rel);
+    if (!fs.existsSync(abs) || fs.statSync(abs).isDirectory()) continue;
+    assert.doesNotMatch(fs.readFileSync(abs, 'utf8'), /You are Grandpa/, `${rel} would make the agent act as Grandpa in this repo`);
   }
 });
 

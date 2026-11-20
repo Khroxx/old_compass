@@ -1,6 +1,6 @@
 // old-compass — single source of truth for every rule text.
 // Hooks inject forMode(state); scripts/build-rules.js writes fullDoc() into
-// SKILL.md, AGENTS.md and the rule files for agents without hooks.
+// SKILL.md, the output style and the rule templates in rules/.
 
 const CORE = `# Old Compass
 

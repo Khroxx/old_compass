@@ -117,15 +117,21 @@ Then open `/hooks` in Codex, review and trust Old Compass's hooks, and start a n
 
 ### Other agents (rules only)
 
-Copy the matching file into your project or your agent's global config:
+Copy the matching template from [`rules/`](rules/) into your project, at the path your agent reads:
 
-| Agent | File |
-|---|---|
-| Cursor | [`.cursor/rules/old-compass.mdc`](.cursor/rules/old-compass.mdc) |
-| Windsurf | [`.windsurf/rules/old-compass.md`](.windsurf/rules/old-compass.md) |
-| Cline | [`.clinerules/old-compass.md`](.clinerules/old-compass.md) |
-| GitHub Copilot | [`.github/copilot-instructions.md`](.github/copilot-instructions.md) |
-| Anything that reads `AGENTS.md` | [`AGENTS.md`](AGENTS.md) |
+| Agent | Template | Copy it to |
+|---|---|---|
+| Cursor | [`rules/cursor/old-compass.mdc`](rules/cursor/old-compass.mdc) | `.cursor/rules/old-compass.mdc` |
+| Windsurf | [`rules/windsurf/old-compass.md`](rules/windsurf/old-compass.md) | `.windsurf/rules/old-compass.md` |
+| Cline | [`rules/cline/old-compass.md`](rules/cline/old-compass.md) | `.clinerules/old-compass.md` |
+| GitHub Copilot | [`rules/copilot/copilot-instructions.md`](rules/copilot/copilot-instructions.md) | `.github/copilot-instructions.md` |
+| Anything that reads `AGENTS.md` | [`rules/generic/old-compass.md`](rules/generic/old-compass.md) | `AGENTS.md` (or append it to yours) |
+
+For example, from your project folder:
+
+```bash
+mkdir -p .cursor/rules && curl -fsSL https://raw.githubusercontent.com/YOUR_GITHUB/old-compass/main/rules/cursor/old-compass.mdc -o .cursor/rules/old-compass.mdc
+```
 
 These agents get the full ruleset, but no hooks: no hard edit guard, no secret guard, no per-project modes and no slash commands. Switch by saying it: "grandpa, drunk mode", "grandpa, show the code".
 
@@ -262,7 +268,7 @@ A project's own entry wins over the global default. To reset everything, delete 
 
 | File | Job |
 |---|---|
-| `hooks/instructions.js` | Every rule text, the single source of truth. `npm run build` copies it into the skill, the output style, `AGENTS.md` and the other agents' rule files. |
+| `hooks/instructions.js` | Every rule text, the single source of truth. `npm run build` copies it into the skill, the output style and the rule templates in `rules/`. |
 | `output-styles/old-compass.md` | Claude Code: a forced output style, so the rules are part of the system prompt on every request. |
 | `hooks/session-start.js` | At session start and after compaction: injects the rules for this project's mode plus the checkers the project has. |
 | `hooks/prompt.js` | Handles `/compass …` switches and reminds the agent of the mode every turn. |
@@ -310,8 +316,10 @@ Delete `~/.old-compass/state.json` (or the file at `OLD_COMPASS_HOME`) and start
 
 ## Development
 
+Working on Old Compass itself with an agent? The repo's own [`AGENTS.md`](AGENTS.md) and `CLAUDE.md` are a contributor guide: they tell the agent it's building the plugin, so it codes normally here. The Grandpa rules only ship as templates in `rules/`, where no agent loads them for this repo. If you have the plugin installed, run `/compass off` (or `/compass write`) in this repo.
+
 ```bash
-npm run build   # regenerate the skill, output style, AGENTS.md and all rule files
+npm run build   # regenerate the skill, output style and the rule templates in rules/
 npm test        # hooks (run exactly as hooks.json calls them), guard, secrets, checkers, eval graders
 npx promptfoo@latest eval -c evals/promptfooconfig.yaml   # behaviour evals, needs ANTHROPIC_API_KEY
 ```
