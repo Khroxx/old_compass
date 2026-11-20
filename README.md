@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.0.4-111111?style=flat-square" alt="Version 0.0.4">
+  <img src="https://img.shields.io/badge/version-0.0.5-111111?style=flat-square" alt="Version 0.0.5">
   <img src="https://img.shields.io/badge/Claude%20Code-plugin-111111?style=flat-square" alt="Claude Code plugin">
   <img src="https://img.shields.io/badge/Codex-plugin-111111?style=flat-square" alt="Codex plugin">
   <img src="https://img.shields.io/badge/license-MIT-111111?style=flat-square" alt="MIT license">
@@ -267,7 +267,7 @@ A project's own entry wins over the global default. To reset everything, delete 
 | `hooks/session-start.js` | At session start and after compaction: injects the rules for this project's mode plus the checkers the project has. |
 | `hooks/prompt.js` | Handles `/compass …` switches and reminds the agent of the mode every turn. |
 | `hooks/guard.js` | Before every tool call: blocks code edits and obvious shell writes (`>`, `tee`, `sed -i`) unless the level is `write`; lets Markdown plans through when their code blocks stay short; blocks secrets always. |
-| `hooks/secrets.js` | Recognises common key and token formats, private keys, `password = "…"` style assignments and URLs with credentials. Lets placeholders through. Reports the kind, never the value. |
+| `hooks/secrets.js` | Recognises common key and token formats, private keys, `password = "…"` style assignments (also `DB_PASSWORD`, `MY_API_KEY`, `dbPassword`), unquoted `.env` lines and URLs with credentials. Lets placeholders through. Reports the kind, never the value. |
 | `hooks/linters.js` | Detects the project's checkers from config files and PATH. Installs nothing. |
 | `skills/` | `compass`, `compass-review`, `compass-plan`, `compass-next`, `compass-help`. |
 

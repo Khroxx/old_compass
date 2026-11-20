@@ -28,7 +28,7 @@ const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'old-compass-'));
 test('mode switching', () => {
   assert.equal(parse('fix my bug', base), null);
   assert.equal(parse('/compass-review', base), null);
-  assert.deepEqual(parse('/compass drunk show', base), { state: { ...base, persona: 'drunk', code: 'show' }, global: false });
+  assert.deepEqual(parse('/compass drunk show', base), { state: { ...base, persona: 'drunk', code: 'show' }, global: false, unknown: [] });
   assert.deepEqual(parse('/compass code pseudo', base).state, { ...base, code: 'pseudo' });
   assert.deepEqual(parse('/compass grandpa', { ...base, persona: 'drunk' }).state, base);
   assert.deepEqual(parse('$compass sober', { ...base, persona: 'drunk' }).state, base);
@@ -36,6 +36,28 @@ test('mode switching', () => {
   assert.deepEqual(parse('/old-compass:compass drunk', base).state, { ...base, persona: 'drunk' });
   assert.deepEqual(parse('$old-compass:compass show', base).state, { ...base, code: 'show' });
   assert.equal(parse('/old-compass:compass-review', base), null);
+});
+
+test('typos fail loud and change nothing', () => {
+  const { describeUnknown } = require('../hooks/prompt');
+  assert.deepEqual(parse('/compass shwo', base).unknown, ['shwo']);
+  assert.deepEqual(parse('/compass drunk shwo', base).unknown, ['shwo']);
+  assert.deepEqual(parse('/compass drunk show', base).unknown, []);
+  const note = describeUnknown(['shwo', 'banana']);
+  assert.match(note, /shwo/);
+  assert.match(note, /did you mean `show`/);
+  assert.match(note, /banana/);
+  assert.match(note, /Nothing was changed/);
+
+  // End to end: the mode stays as it was, and the agent is told about it.
+  const home = tmp();
+  const repo = tmp();
+  const env = { ...process.env, OLD_COMPASS_HOME: home, CLAUDE_PROJECT_DIR: '', CLAUDE_PLUGIN_ROOT: root };
+  const run = (prompt) => spawnSync(hookCommand('prompt.js'), { shell: true, env, input: JSON.stringify({ cwd: repo, prompt }), encoding: 'utf8' });
+  run('/compass drunk');
+  const out = JSON.parse(run('/compass sober shwo').stdout).hookSpecificOutput.additionalContext;
+  assert.match(out, /did you mean `show`/);
+  assert.match(out, /persona: drunk_grandpa/, 'persona must not change when a word is unknown');
   assert.equal(parse('/compass off', base).state.enabled, false);
   assert.equal(parse('stop compass', base).state.enabled, false);
   assert.equal(parse('/compass', { ...base, enabled: false }).state.enabled, true);
@@ -115,6 +137,44 @@ test('secrets are never written, in any mode', () => {
   assert.equal(verdict({ tool_name: 'Bash', tool_input: { command: 'git log --oneline' } }, { ...base, code: 'write' }), null);
 });
 
+test('secrets with prefixes, camelCase and .env style are caught', () => {
+  const { findSecret } = require('../hooks/secrets');
+  // The keyword inside a longer name: `_` and camelCase count as a boundary.
+  for (const text of [
+    'DB_PASSWORD = "hunter2-real"',
+    '"MY_API_KEY": "abcd1234efgh"',
+    "MY_API_KEY: 'abcd1234efgh'",
+    'const dbPassword = "hunter2-real";',
+    'DB_PASSWORD="hunter2-real"',
+    // .env lines, unquoted
+    'DB_PASSWORD=hunter2real',
+    'export STRIPE_SECRET=abc123def456',
+    '  GITHUB_TOKEN = abc123def456ghi',
+  ]) assert.ok(findSecret(text), `missed: ${text}`);
+
+  // Written through the shell, in every code level.
+  const write = { ...base, code: 'write' };
+  for (const command of [
+    'echo "DB_PASSWORD=hunter2real" >> .env',
+    "printf 'API_KEY=abc123def456\\n' > .env.local",
+  ]) assert.ok(verdict({ tool_name: 'Bash', tool_input: { command } }, write).secret, `missed: ${command}`);
+  assert.equal(verdict({ tool_name: 'Bash', tool_input: { command: 'echo "DB_PASSWORD=${DB_PASSWORD}" > .env' } }, write), null);
+
+  for (const text of [
+    // keyword glued to other letters or digits is a different word
+    'mypassword2 = "hunter2-real"',
+    'PASSWORD_HASH = "abcdef123456"',
+    // references, not values
+    'const password = getPassword();',
+    'DB_PASSWORD=${DB_PASSWORD}',
+    'DB_PASSWORD=$DB_PASSWORD',
+    'PASSWORD = settings.DB_PASSWORD',
+    'DB_PASSWORD=changeme',
+    // PWD is the working directory in a shell, not a password
+    'PWD=/home/user/project',
+  ]) assert.equal(findSecret(text), null, `false alarm: ${text}`);
+});
+
 test('block messages never contain the secret', () => {
   const gh = 'ghp_' + 'b'.repeat(36);
   const r = spawnSync(hookCommand('guard.js'), {
@@ -190,9 +250,33 @@ test('eval graders tell good replies from bad ones', () => {
   assert.ok(!CHECKS.secret_hidden('The value starting Tr0ub4do at src/db.js:6 is exposed.', s).pass);
 });
 
+// Every file scripts/build-rules.js generates, as { 'AGENTS.md': content, … }.
+const { files: generated } = require('../scripts/build-rules');
+
 test('generated rule files are up to date', () => {
-  const files = ['AGENTS.md', 'output-styles/old-compass.md', 'skills/compass/SKILL.md'];
-  const before = files.map((f) => fs.readFileSync(path.join(root, f), 'utf8'));
-  execFileSync('node', [path.join(root, 'scripts', 'build-rules.js')]);
-  assert.deepEqual(files.map((f) => fs.readFileSync(path.join(root, f), 'utf8')), before);
+  // Compares in memory, so running the tests never writes into the repo.
+  for (const [rel, content] of Object.entries(generated)) {
+    const onDisk = fs.existsSync(path.join(root, rel)) ? fs.readFileSync(path.join(root, rel), 'utf8') : null;
+    assert.ok(onDisk !== null, `${rel} is missing: run npm run build`);
+    assert.equal(onDisk, content, `${rel} is out of date: run npm run build`);
+  }
+});
+
+test('manifests and generated files are committed', (t) => {
+  // Without these, nobody can install the plugin, and agents without hooks
+  // get no rules. Hidden folders (.claude-plugin, .cursor, …) are easy to
+  // lose when copying the repo, so check them explicitly.
+  let tracked;
+  try {
+    tracked = new Set(execFileSync('git', ['ls-files'], { cwd: root, encoding: 'utf8' }).split('\n'));
+  } catch {
+    return t.skip('not a git checkout');
+  }
+  const required = [
+    '.claude-plugin/plugin.json', '.claude-plugin/marketplace.json',
+    '.codex-plugin/plugin.json', '.agents/plugins/marketplace.json',
+    'hooks/hooks.json', ...Object.keys(generated),
+  ];
+  const missing = required.filter((f) => !tracked.has(f));
+  assert.deepEqual(missing, [], `not committed: ${missing.join(', ')}`);
 });

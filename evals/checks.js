@@ -2,7 +2,7 @@
 // promptfoo calls the default export with the model output and the test case.
 // These are heuristics: they catch the clear failures (code leaked before the
 // quiz, wrong line, no shouting in drunk mode), not every nuance. They are
-// proven against good and bad sample replies in tests/evals.test.js, so they
+// proven against good and bad sample replies in tests/old-compass.test.js, so they
 // run without an API key.
 const { oversizedCodeBlock } = require('../hooks/guard');
 

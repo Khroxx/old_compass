@@ -54,9 +54,15 @@ ${body}
   '.cursor/rules/old-compass.mdc': `---\ndescription: Old Compass coding mentor mode\nalwaysApply: true\n---\n\n${header}\n\n${body}\n`,
 };
 
-for (const [rel, content] of Object.entries(files)) {
-  const file = path.join(root, rel);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, content);
-  console.log('wrote', rel);
+// Exported so the tests can compare against the files on disk without
+// writing anything into the repo.
+module.exports = { files };
+
+if (require.main === module) {
+  for (const [rel, content] of Object.entries(files)) {
+    const file = path.join(root, rel);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, content);
+    console.log('wrote', rel);
+  }
 }
