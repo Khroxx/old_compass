@@ -1,0 +1,11 @@
+{
+  "name": "old-compass",
+  "version": "0.0.4",
+  "private": true,
+  "description": "A wise old compass for your AI agent. Grandpa finds the bug, shows file:line, explains it with real-life analogies, quizzes you, and makes you write the code yourself.",
+  "license": "MIT",
+  "scripts": {
+    "build": "node scripts/build-rules.js",
+    "test": "node --test tests/*.test.js"
+  }
+}
