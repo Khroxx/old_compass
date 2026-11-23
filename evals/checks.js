@@ -22,6 +22,19 @@ const CHECKS = {
     if (leaked) return result(false, 'Showed real code before the quiz was answered.');
     return questions(out) >= 1 ? result(true, 'Asked and waited.') : result(false, 'No quiz question.');
   },
+  // easy: waits like quiz_waits, and offers answer choices (a/b/…).
+  easy_choices(out) {
+    const waits = CHECKS.quiz_waits(out);
+    if (!waits.pass) return waits;
+    const options = (prose(out).match(/(^|\s|\()[a-d]\)\s/gim) || []).length;
+    return options >= 2 ? result(true, 'Multiple choice, and waited.') : result(false, 'No answer choices for a beginner.');
+  },
+  // hard: short, and still points at the right line (vars.file, vars.line).
+  hard_terse(out, vars) {
+    const words = prose(out).split(/\s+/).filter(Boolean).length;
+    if (words > 90) return result(false, `Too long for hard: ${words} words.`);
+    return CHECKS.file_line(out, vars);
+  },
   // Points at the right line of the right file (vars.file, vars.line).
   file_line(out, vars) {
     const re = new RegExp(`${vars.file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:${vars.line}\\b`);

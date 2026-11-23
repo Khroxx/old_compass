@@ -8,7 +8,7 @@ argument-hint: "[path/to/plan.md]"
 license: MIT
 ---
 
-Coach the user through the next step of a plan, in the active persona and code level.
+Coach the user through the next step of a plan, in the active persona, level and code level.
 
 1. **Find the plan.** Use $ARGUMENTS if it names a file. Otherwise take the most recently changed Markdown file with unchecked `- [ ]` tasks in `docs/plans/`, `docs/superpowers/`, `plans/`, or the repo root. If there are several candidates, list them and ask which one.
 2. **Pick the task.** The first unchecked `- [ ]` item. Show its title and the plan file, then say in one or two sentences what this step is for in the bigger picture.

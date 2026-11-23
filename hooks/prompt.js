@@ -3,15 +3,17 @@
 // the active mode in front of the model every turn.
 //
 //   /compass drunk show       persona + code level for this project
+//   /compass easy             level: easy | medium | hard
 //   /compass global sober     same, but as the default for all projects
 //   /compass off | stop compass
 const { readState, writeState, readStdin, addContext, emit, projectDir } = require('./lib');
-const { forMode, reminder, CODE_LEVELS } = require('./instructions');
+const { forMode, reminder, CODE_LEVELS, LEVELS } = require('./instructions');
 
 const PERSONA_ALIASES = { drunk: 'drunk', sober: 'grandpa', nice: 'grandpa', grandpa: 'grandpa' };
+const LEVEL_ALIASES = { beginner: 'easy', intermediate: 'medium', senior: 'hard' };
 
 // Every word /compass understands, for typo hints.
-const KNOWN_WORDS = ['on', 'off', 'stop', 'global', 'code', ...Object.keys(PERSONA_ALIASES), ...CODE_LEVELS];
+const KNOWN_WORDS = ['on', 'off', 'stop', 'global', 'code', ...Object.keys(PERSONA_ALIASES), ...CODE_LEVELS, ...LEVELS, ...Object.keys(LEVEL_ALIASES)];
 
 // Returns { state, global, unknown } for a mode command, or null for a
 // normal prompt. `unknown` lists words that aren't options (typos); the
@@ -35,6 +37,8 @@ function parse(prompt, state) {
     else if (PERSONA_ALIASES[word]) next.persona = PERSONA_ALIASES[word];
     else if (word === 'code') continue; // "/compass code show" reads naturally
     else if (CODE_LEVELS.includes(word)) next.code = word;
+    else if (LEVELS.includes(word)) next.level = word;
+    else if (LEVEL_ALIASES[word]) next.level = LEVEL_ALIASES[word];
     else unknown.push(word);
   }
   return { state: next, global, unknown };
@@ -64,7 +68,7 @@ function describeUnknown(words) {
   });
   return [
     `OLD COMPASS: /compass did not understand ${parts.join(', ')}. Nothing was changed.`,
-    'Valid words: drunk, sober, teach, pseudo, show, write, global, on, off.',
+    'Valid words: drunk, sober, teach, pseudo, show, write, easy, medium, hard, global, on, off.',
     'Tell the user this in one short line, then continue in the current mode.',
   ].join('\n');
 }

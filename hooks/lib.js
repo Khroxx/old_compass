@@ -2,7 +2,7 @@
 //
 // State file (one per machine, ~/.old-compass/state.json by default):
 //   {
-//     "default":  { "enabled": true, "persona": "grandpa", "code": "teach" },
+//     "default":  { "enabled": true, "persona": "grandpa", "code": "teach", "level": "medium" },
 //     "projects": { "/abs/path/to/repo": { "persona": "drunk" } }
 //   }
 // A project's entry overrides the default, so drunk mode in a hobby repo does
@@ -17,7 +17,7 @@ const stateDir = process.env.OLD_COMPASS_HOME
   || (isCodex ? process.env.PLUGIN_DATA : path.join(os.homedir(), '.old-compass'));
 const statePath = path.join(stateDir, 'state.json');
 
-const DEFAULTS = { enabled: true, persona: 'grandpa', code: 'teach' };
+const DEFAULTS = { enabled: true, persona: 'grandpa', code: 'teach', level: 'medium' };
 
 // The repo the agent works in. Claude Code exports CLAUDE_PROJECT_DIR to hooks;
 // every host passes cwd in the hook input.
@@ -45,9 +45,9 @@ function readState(dir) {
 // Saves a mode either for one project or, with dir = null, as the global default.
 function writeState(dir, state) {
   const file = readFile();
-  const { enabled, persona, code } = state;
-  if (dir) file.projects[dir] = { enabled, persona, code };
-  else file.default = { enabled, persona, code };
+  const { enabled, persona, code, level } = state;
+  if (dir) file.projects[dir] = { enabled, persona, code, level };
+  else file.default = { enabled, persona, code, level };
   fs.mkdirSync(stateDir, { recursive: true });
   fs.writeFileSync(statePath, JSON.stringify(file, null, 2));
 }

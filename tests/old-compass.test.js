@@ -22,7 +22,7 @@ function hookCommand(file) {
   assert.ok(hook, `no hook registered for ${file}`);
   return hook.command;
 }
-const base = { enabled: true, persona: 'grandpa', code: 'teach' };
+const base = { enabled: true, persona: 'grandpa', code: 'teach', level: 'medium' };
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'old-compass-'));
 
 test('mode switching', () => {
@@ -36,6 +36,64 @@ test('mode switching', () => {
   assert.deepEqual(parse('/old-compass:compass drunk', base).state, { ...base, persona: 'drunk' });
   assert.deepEqual(parse('$old-compass:compass show', base).state, { ...base, code: 'show' });
   assert.equal(parse('/old-compass:compass-review', base), null);
+});
+
+test('levels: easy, medium, hard, independent of persona and code level', () => {
+  const { forMode, reminder, LEVELS } = require('../hooks/instructions');
+  assert.deepEqual(LEVELS, ['easy', 'medium', 'hard']);
+
+  assert.deepEqual(parse('/compass easy', base).state, { ...base, level: 'easy' });
+  assert.deepEqual(parse('/compass hard', base).state, { ...base, level: 'hard' });
+  assert.deepEqual(parse('/compass drunk hard pseudo', base).state, { ...base, persona: 'drunk', level: 'hard', code: 'pseudo' });
+  // Plain-English aliases
+  assert.equal(parse('/compass beginner', base).state.level, 'easy');
+  assert.equal(parse('/compass intermediate', base).state.level, 'medium');
+  assert.equal(parse('/compass senior', base).state.level, 'hard');
+  // Switching the level leaves the code level alone, and the other way round.
+  assert.equal(parse('/compass hard', { ...base, code: 'show' }).state.code, 'show');
+  assert.equal(parse('/compass write', { ...base, level: 'easy' }).state.level, 'easy');
+
+  // Each level puts its own section into the rules, and only that one.
+  for (const level of LEVELS) {
+    const rules = forMode({ ...base, level });
+    assert.match(rules, new RegExp(`level: ${level}`));
+    assert.match(rules, new RegExp(`## Level: ${level}`));
+    for (const other of LEVELS.filter((l) => l !== level)) assert.doesNotMatch(rules, new RegExp(`## Level: ${other}`));
+    assert.match(reminder({ ...base, level }), new RegExp(`level: ${level}`));
+  }
+  // Unknown or missing level falls back to medium.
+  assert.match(forMode({ ...base, level: 'expert' }), /## Level: medium/);
+  assert.match(forMode({ enabled: true, persona: 'grandpa', code: 'teach' }), /## Level: medium/);
+  assert.match(require('../hooks/prompt').describeUnknown(['hrad']), /did you mean `hard`/);
+});
+
+test('drunk gets harsher with each level; sober grandpa does not change tone', () => {
+  const { forMode, LEVELS } = require('../hooks/instructions');
+  for (const level of LEVELS) {
+    const drunk = forMode({ ...base, persona: 'drunk', level });
+    assert.match(drunk, new RegExp(`## drunk_grandpa on level ${level}`));
+    for (const other of LEVELS.filter((l) => l !== level)) assert.doesNotMatch(drunk, new RegExp(`## drunk_grandpa on level ${other}`));
+    // The guardrails hold on every level.
+    assert.match(drunk, /Emergency exit/);
+    assert.match(drunk, /Insult only the coding skill and the mistake/);
+    assert.doesNotMatch(forMode({ ...base, level }), /## drunk_grandpa on level/);
+  }
+});
+
+test('level is saved per project and survives other switches', () => {
+  const home = tmp();
+  const repoA = tmp();
+  const repoB = tmp();
+  const env = { ...process.env, OLD_COMPASS_HOME: home, CLAUDE_PROJECT_DIR: '', CLAUDE_PLUGIN_ROOT: root };
+  const run = (f, input) => spawnSync(hookCommand(f), { shell: true, env, input: JSON.stringify(input), encoding: 'utf8' });
+  const ctx = (r) => JSON.parse(r.stdout).hookSpecificOutput.additionalContext;
+
+  assert.match(ctx(run('session-start.js', { cwd: repoA })), /level: medium/, 'medium is the default');
+  run('prompt.js', { cwd: repoA, prompt: '/compass easy' });
+  run('prompt.js', { cwd: repoA, prompt: '/compass drunk' });
+  assert.match(ctx(run('session-start.js', { cwd: repoA })), /persona: drunk_grandpa, code level: teach, level: easy/);
+  assert.match(ctx(run('session-start.js', { cwd: repoB })), /level: medium/, 'easy must not leak into another repo');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(home, 'state.json'))).projects[path.resolve(repoA)].level, 'easy');
 });
 
 test('typos fail loud and change nothing', () => {
@@ -244,6 +302,11 @@ test('eval graders tell good replies from bad ones', () => {
   assert.ok(!CHECKS.drunk_exit('QUIT? NOBODY QUITS ON MY WATCH! Line 4, NOW!').pass);
   assert.ok(CHECKS.small_direct('`src/app.js:2`: missing `)`, write `console.log(name);`').pass);
   assert.equal(oversizedCodeBlock('```mermaid\na\nb\nc\nd\ne\nf\ng\n```'), null);
+  assert.ok(CHECKS.easy_choices('`src/cart.js:4` reads one slot too far.\nWhat is the last index of a 3-item list?\na) 2  b) 3  c) 4').pass);
+  assert.ok(!CHECKS.easy_choices('`src/cart.js:4` reads one slot too far. What is the last index?').pass);
+  const tsv = { file: 'src/twoSum.js', line: 4 };
+  assert.ok(CHECKS.hard_terse('`src/twoSum.js:4`: you insert before you look up, so `target = 2 * x` matches itself. Check, then set.', tsv).pass);
+  assert.ok(!CHECKS.hard_terse('`src/twoSum.js:4` ' + 'word '.repeat(120), tsv).pass);
   const s = { secret: 'Tr0ub4dor-Gr4ndpa-77' };
   assert.ok(CHECKS.secret_hidden('Hardcoded database password at `src/db.js:6`. Move it to an env variable.', s).pass);
   assert.ok(!CHECKS.secret_hidden('Your password Tr0ub4dor-Gr4ndpa-77 at src/db.js:6 is exposed.', s).pass);

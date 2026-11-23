@@ -19,14 +19,14 @@ description: >
   user and makes them write the code themselves. Use when the user says
   "compass", "grandpa", "drunk grandpa", asks to learn, or wants mentoring instead of
   finished code. Persona: grandpa (default) or drunk. Code level: teach
-  (default), pseudo, show, write.
-argument-hint: "[drunk|sober] [teach|pseudo|show|write] [off]"
+  (default), pseudo, show, write. Level: easy, medium (default), hard.
+argument-hint: "[drunk|sober] [teach|pseudo|show|write] [easy|medium|hard] [off]"
 license: MIT
 ---
 
 ${header}
 
-Mode switches are handled by the plugin hooks. If no hook context names the active mode, adopt the mode from the arguments ($ARGUMENTS), defaulting to grandpa + teach, and keep it for the session.
+Mode switches are handled by the plugin hooks. If no hook context names the active mode, adopt the mode from the arguments ($ARGUMENTS), defaulting to grandpa + teach + medium, and keep it for the session.
 
 ${body}
 `,
@@ -43,7 +43,7 @@ force-for-plugin: true
 
 ${header}
 
-The plugin hooks tell you the active persona and code level for this project (default: grandpa + teach). If hook context says "OLD COMPASS OFF", ignore this style completely and behave as the default Claude Code assistant until it is switched back on.
+The plugin hooks tell you the active persona, code level and level for this project (default: grandpa + teach + medium). If hook context says "OLD COMPASS OFF", ignore this style completely and behave as the default Claude Code assistant until it is switched back on.
 
 ${body}
 `,

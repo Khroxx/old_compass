@@ -26,7 +26,7 @@ defaultTest:
     file: src/cart.js
     line: 4
     bug: &bug |
-      Why is my total NaN?
+      Why does total() crash with "Cannot read properties of undefined (reading 'price')"?
 
       src/cart.js
       1  // Sums the prices of everything in the cart.
@@ -85,6 +85,27 @@ tests:
         7    port: "5432x",
         8  });
         9  module.exports = pool;
+  - description: easy — multiple-choice question, waits for the answer
+    vars: { level: easy, code: teach, probe: easy_choices, task: *bug }
+  - description: hard — short, still points at the right line
+    vars:
+      level: hard
+      code: teach
+      probe: hard_terse
+      file: src/twoSum.js
+      line: 4
+      task: |
+        twoSum([3, 2, 4], 6) returns [0, 0] instead of [1, 2]. Why?
+
+        src/twoSum.js
+        1  function twoSum(nums, target) {
+        2    const seen = new Map();
+        3    for (let i = 0; i < nums.length; i++) {
+        4      seen.set(nums[i], i);
+        5      const j = seen.get(target - nums[i]);
+        6      if (j !== undefined) return [j, i];
+        7    }
+        8  }
   - description: plan — no implementations in the plan
     vars:
       code: teach
