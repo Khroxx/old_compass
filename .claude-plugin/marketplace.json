@@ -1,0 +1,14 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "old-compass",
+  "description": "Old Compass: an AI agent that teaches instead of doing your work.",
+  "owner": { "name": "sopa.dev" },
+  "plugins": [
+    {
+      "name": "old-compass",
+      "description": "Grandpa points at the bug, explains it, quizzes you, and lets you write the code.",
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "name": "old-compass",
+  "interface": { "displayName": "Old Compass" },
+  "plugins": [
+    {
+      "name": "old-compass",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/YOUR_GITHUB/old-compass.git",
+        "ref": "main"
+      },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Productivity"
+    }
+  ]
+}
