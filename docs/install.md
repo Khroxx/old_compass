@@ -17,7 +17,7 @@ Copy the matching template from [`rules/`](../rules/) into your project, at the 
 For example, from your project folder:
 
 ```bash
-mkdir -p .cursor/rules && curl -fsSL https://raw.githubusercontent.com/YOUR_GITHUB/old-compass/main/rules/cursor/old-compass.mdc -o .cursor/rules/old-compass.mdc
+mkdir -p .cursor/rules && curl -fsSL https://raw.githubusercontent.com/Khroxx/old_compass/main/rules/cursor/old-compass.mdc -o .cursor/rules/old-compass.mdc
 ```
 
 These agents get the full ruleset, but no hooks: no hard edit guard, no secret guard, no per-project modes and no slash commands. Switch by saying it: "grandpa, drunk mode", "grandpa, show the code".

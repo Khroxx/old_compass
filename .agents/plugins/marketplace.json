@@ -6,7 +6,7 @@
       "name": "old-compass",
       "source": {
         "source": "url",
-        "url": "https://github.com/YOUR_GITHUB/old-compass.git",
+        "url": "https://github.com/Khroxx/old_compass.git",
         "ref": "main"
       },
       "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },

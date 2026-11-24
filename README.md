@@ -36,7 +36,7 @@ Two personas: **Grandpa** (warm, patient) and, opt-in and for the brave, **drunk
 **Claude Code** (two separate prompts):
 
 ```
-/plugin marketplace add YOUR_GITHUB/old-compass
+/plugin marketplace add Khroxx/old_compass
 ```
 ```
 /plugin install old-compass@old-compass
@@ -47,7 +47,7 @@ Start a new session. Old Compass is on by default (Grandpa, `teach`).
 **Codex:**
 
 ```bash
-codex plugin marketplace add YOUR_GITHUB/old-compass
+codex plugin marketplace add Khroxx/old_compass
 codex plugin add old-compass@old-compass
 ```
 
