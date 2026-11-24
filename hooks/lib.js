@@ -3,10 +3,13 @@
 // State file (one per machine, ~/.old-compass/state.json by default):
 //   {
 //     "default":  { "enabled": true, "persona": "grandpa", "code": "teach", "level": "medium" },
-//     "projects": { "/abs/path/to/repo": { "persona": "drunk" } }
+//     "projects": { "/abs/path/to/repo": { "persona": "drunk" } },
+//     "tested":   { "/abs/path/to/repo": { "at": 1700000000000, "fingerprint": "<sha1>" } }
 //   }
 // A project's entry overrides the default, so drunk mode in a hobby repo does
 // not leak into work repos. `/compass global …` edits the default instead.
+const crypto = require('crypto');
+const { execFileSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -29,10 +32,10 @@ function readFile() {
   try {
     const raw = JSON.parse(fs.readFileSync(statePath, 'utf8'));
     // v0.0.1 stored a flat { enabled, persona, code }: treat it as the default.
-    if (!raw.default && !raw.projects) return { default: raw, projects: {} };
-    return { default: raw.default || {}, projects: raw.projects || {} };
+    if (!raw.default && !raw.projects) return { default: raw, projects: {}, tested: {} };
+    return { default: raw.default || {}, projects: raw.projects || {}, tested: raw.tested || {} };
   } catch {
-    return { default: {}, projects: {} };
+    return { default: {}, projects: {}, tested: {} };
   }
 }
 
@@ -48,8 +51,41 @@ function writeState(dir, state) {
   const { enabled, persona, code, level } = state;
   if (dir) file.projects[dir] = { enabled, persona, code, level };
   else file.default = { enabled, persona, code, level };
+  save(file);
+}
+
+function save(file) {
   fs.mkdirSync(stateDir, { recursive: true });
   fs.writeFileSync(statePath, JSON.stringify(file, null, 2));
+}
+
+// A hash of the project's code as it is right now: tracked changes plus the
+// content of untracked files. Two equal fingerprints mean "same code". Returns
+// null outside a git repo. Staging does not change it; editing a file does.
+function fingerprint(dir) {
+  const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] });
+  try {
+    const hash = crypto.createHash('sha1');
+    try { hash.update(git('diff', 'HEAD')); } catch { /* repo without commits yet */ }
+    for (const f of git('ls-files', '--others', '--exclude-standard', '-z').split('\0').filter(Boolean)) {
+      hash.update(f);
+      try { hash.update(fs.readFileSync(path.join(dir, f))); } catch { /* vanished or unreadable */ }
+    }
+    return hash.digest('hex');
+  } catch {
+    return null;
+  }
+}
+
+// "The user said the tests passed": when, and on which code.
+function readTested(dir) {
+  return readFile().tested[dir] || null;
+}
+
+function writeTested(dir) {
+  const file = readFile();
+  file.tested[dir] = { at: Date.now(), fingerprint: fingerprint(dir) };
+  save(file);
 }
 
 function readStdin() {
@@ -75,4 +111,4 @@ function addContext(event, text) {
   emit({ hookSpecificOutput: { hookEventName: event, additionalContext: text } });
 }
 
-module.exports = { readState, writeState, readStdin, emit, addContext, projectDir, statePath, isCodex };
+module.exports = { readState, writeState, readTested, writeTested, fingerprint, readStdin, emit, addContext, projectDir, statePath, isCodex };

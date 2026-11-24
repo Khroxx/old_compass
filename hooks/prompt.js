@@ -6,14 +6,15 @@
 //   /compass easy             level: easy | medium | hard
 //   /compass global sober     same, but as the default for all projects
 //   /compass off | stop compass
-const { readState, writeState, readStdin, addContext, emit, projectDir } = require('./lib');
+//   /compass tested           "my tests passed": remembered until the code changes
+const { readState, writeState, writeTested, readStdin, addContext, emit, projectDir } = require('./lib');
 const { forMode, reminder, CODE_LEVELS, LEVELS } = require('./instructions');
 
 const PERSONA_ALIASES = { drunk: 'drunk', sober: 'grandpa', nice: 'grandpa', grandpa: 'grandpa' };
 const LEVEL_ALIASES = { beginner: 'easy', intermediate: 'medium', senior: 'hard' };
 
 // Every word /compass understands, for typo hints.
-const KNOWN_WORDS = ['on', 'off', 'stop', 'global', 'code', ...Object.keys(PERSONA_ALIASES), ...CODE_LEVELS, ...LEVELS, ...Object.keys(LEVEL_ALIASES)];
+const KNOWN_WORDS = ['on', 'off', 'stop', 'global', 'code', 'tested', ...Object.keys(PERSONA_ALIASES), ...CODE_LEVELS, ...LEVELS, ...Object.keys(LEVEL_ALIASES)];
 
 // Returns { state, global, unknown } for a mode command, or null for a
 // normal prompt. `unknown` lists words that aren't options (typos); the
@@ -79,6 +80,13 @@ function main() {
   return readStdin().then((input) => {
     const dir = projectDir(input);
     const state = readState(dir);
+    // "/compass tested": the user ran the tests themselves and they passed.
+    // Remember it with a fingerprint of the code, so git advice can tell a
+    // fresh green from a stale one. Not a mode switch, so it skips parse().
+    if (state.enabled && /^[/@$](?:old-compass:)?compass\s+tested\s*$/i.test((input.prompt || '').trim())) {
+      writeTested(dir);
+      return addContext('UserPromptSubmit', 'OLD COMPASS: the user says their tests passed. It is remembered for this exact code. Acknowledge in one short line; if they want to commit, remind them to type the git commands themselves.');
+    }
     const cmd = parse(input.prompt || '', state);
     if (cmd && cmd.unknown.length) {
       // Fail loud: keep the mode as it was and let the agent say why.

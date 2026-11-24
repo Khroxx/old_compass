@@ -168,6 +168,92 @@ test('shell writes to code files are caught', () => {
   assert.equal(shellWriteTarget('[ $a -gt 3 ] && echo ok'), null);
 });
 
+test('git commit, push and pull stay with the user, in every code level', () => {
+  const run = (command, state = base) => verdict({ tool_name: 'Bash', tool_input: { command } }, state);
+  const blocked = ['git commit -m "x"', 'git push origin main', 'git pull --rebase', 'git add . && git commit -am x',
+    'git -C sub push', 'git -c user.name=x commit', 'FOO=1 git pull', 'cd app; git push'];
+  for (const cmd of blocked) {
+    // `write` unlocks code edits, never git.
+    for (const code of ['teach', 'write']) assert.ok(run(cmd, { ...base, code }), `${cmd} should be blocked in ${code}`);
+  }
+  assert.equal(run('git push').git, 'push');
+  // Reading and staging are fine, and so is talking about git.
+  for (const cmd of ['git status', 'git diff --staged', 'git log --grep commit', 'git add src/a.js', 'git fetch',
+    'echo "run git commit yourself"', 'grep -r "git push" docs']) assert.equal(run(cmd), null, `${cmd} should pass`);
+  // /compass off hands everything back.
+  assert.equal(run('git commit -m x', { ...base, enabled: false }), null);
+});
+
+test('commit and push blocks remind the user to test first, naming the project\'s test command', () => {
+  const guard = (dir, command) => spawnSync(hookCommand('guard.js'), {
+    shell: true,
+    env: { ...process.env, OLD_COMPASS_HOME: tmp(), CLAUDE_PROJECT_DIR: '', CLAUDE_PLUGIN_ROOT: root },
+    input: JSON.stringify({ cwd: dir, tool_name: 'Bash', tool_input: { command } }),
+    encoding: 'utf8',
+  });
+  const withTests = tmp();
+  fs.writeFileSync(path.join(withTests, 'package.json'), JSON.stringify({ scripts: { test: 'node --test' } }));
+  for (const cmd of ['git commit -m x', 'git push']) {
+    const r = guard(withTests, cmd);
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /npm test/, `${cmd}: should name the test command`);
+    assert.match(r.stderr, /test first/i);
+  }
+  // No tests detected: the reminder says so and points at writing one first.
+  assert.match(guard(tmp(), 'git commit -m x').stderr, /no test command/i);
+  // Pull is about incoming changes, not outgoing ones: no test nag.
+  assert.doesNotMatch(guard(withTests, 'git pull').stderr, /test first/i);
+});
+
+test('/compass tested is remembered, and goes stale when the code changes', () => {
+  const home = tmp();
+  const repo = tmp();
+  const git = (...a) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...a], { cwd: repo });
+  git('init', '-q');
+  fs.writeFileSync(path.join(repo, 'a.js'), 'one\n');
+  git('add', '.');
+  git('commit', '-qm', 'start');
+  fs.writeFileSync(path.join(repo, 'package.json'), JSON.stringify({ scripts: { test: 'node --test' } }));
+
+  const hook = (file, input) => spawnSync(hookCommand(file), {
+    shell: true,
+    env: { ...process.env, OLD_COMPASS_HOME: home, CLAUDE_PROJECT_DIR: '', CLAUDE_PLUGIN_ROOT: root },
+    input: JSON.stringify({ cwd: repo, ...input }),
+    encoding: 'utf8',
+  });
+  const commit = () => hook('guard.js', { tool_name: 'Bash', tool_input: { command: 'git commit -m x' } }).stderr;
+
+  assert.match(commit(), /not tested|never/i);
+  assert.match(commit(), /old-compass: tests passed/);
+
+  // The model records a green it heard about or saw, by running the marker
+  // command the rules give it. The guard lets it through and remembers.
+  const { fullDoc } = require('../hooks/instructions');
+  const marker = fullDoc().match(/`(echo "old-compass: tests passed")`/);
+  assert.ok(marker, 'the rules must tell the model which command records a green');
+  const rec = hook('guard.js', { tool_name: 'Bash', tool_input: { command: marker[1] } });
+  assert.equal(rec.status, 0);
+  assert.match(commit(), /nothing has changed since/i);
+
+  // /compass tested does the same, typed by the user.
+  fs.writeFileSync(path.join(repo, 'a.js'), 'one-b\n');
+  assert.match(commit(), /changed since/i);
+  hook('prompt.js', { prompt: '/compass tested' });
+  assert.match(commit(), /nothing has changed since/i);
+
+  // A mode switch must not wipe the memory.
+  hook('prompt.js', { prompt: '/compass drunk' });
+  assert.match(commit(), /nothing has changed since/i);
+
+  // Editing tracked code, or adding a new untracked file, makes the green stale.
+  fs.writeFileSync(path.join(repo, 'a.js'), 'two\n');
+  assert.match(commit(), /changed since/i);
+  assert.doesNotMatch(commit(), /nothing has changed since/i);
+  hook('prompt.js', { prompt: '/compass tested' });
+  fs.writeFileSync(path.join(repo, 'new.js'), 'x\n');
+  assert.doesNotMatch(commit(), /nothing has changed since/i);
+});
+
 test('secrets are never written, in any mode', () => {
   const { findSecret } = require('../hooks/secrets');
   // Fake keys, assembled at runtime so this file itself trips no scanner.

@@ -43,6 +43,7 @@ And for the brave: his other side, after a few drinks.
 - **Explains it like a person.** One short analogy from everyday life (a kitchen, a workshop, a family dinner), never more jargon.
 - **Quizzes before it tells.** In the default mode you get 1–3 short questions, your answers get graded, and then you get the finished code anyway. You type it in yourself.
 - **Keeps its hands off your code.** A hook blocks the agent from editing code files unless you allow it. Plans and notes in Markdown are fine.
+- **Keeps its hands off your git.** A hook blocks `git commit`, `git push` and `git pull`, even in `write`. Grandpa suggests the commit message and teaches you the commands; you type them. Before a commit or push he makes you run the project's tests first (he names the test command he finds), and points out a diff that has no test.
 - **Checks itself before it speaks.** Reads the real file, runs your project's linters, type checker, Semgrep and tests read-only, never invents APIs. No slop.
 - **Writes comments for the next person.** Every snippet carries comments a developer new to the repo would understand, and reviews point out where a newcomer would get lost.
 - **Plans with you, not for you.** Asks questions, shows options and trade-offs, lets you decide, and walks you through the plan one task at a time.
@@ -174,6 +175,7 @@ New to programming? Start with `/compass easy`. Been doing this for years? `/com
 | `/compass drunk hard show` | Combine them in one go. |
 | `/compass global …` | Change the default for all projects instead of this one. |
 | `/compass off` | Turn it off for this project. Also: "stop compass". |
+| `/compass tested` | Optional. Normally Grandpa notices from your chat (you say or paste that the tests passed, or he sees them pass) and remembers it for this exact code. Type this to tell him by hand. Edit a file afterwards and the green goes stale, so the next commit or push reminder asks for a new run. |
 | `/compass-review [file]` | Review your uncommitted changes, or a file. Runs your project's checkers first, then reports findings by `file:line`, most important first. |
 | `/compass-plan <goal>` | Plan together: questions first, then options and trade-offs, then small steps. Optionally saved as `docs/plans/YYYY-MM-DD-<topic>.md`. |
 | `/compass-next [plan.md]` | Take the next open `- [ ]` task from a plan and coach you through it. Checks your work and ticks the task off when it really works. |
@@ -570,7 +572,7 @@ A project's own entry wins over the global default. To reset everything, delete 
 | `output-styles/old-compass.md` | Claude Code: a forced output style, so the rules are part of the system prompt on every request. |
 | `hooks/session-start.js` | At session start and after compaction: injects the rules for this project's mode plus the checkers the project has. |
 | `hooks/prompt.js` | Handles `/compass …` switches and reminds the agent of the mode every turn. |
-| `hooks/guard.js` | Before every tool call: blocks code edits and obvious shell writes (`>`, `tee`, `sed -i`) unless the level is `write`; lets Markdown plans through when their code blocks stay short; blocks secrets always. |
+| `hooks/guard.js` | Before every tool call: blocks code edits and obvious shell writes (`>`, `tee`, `sed -i`) unless the level is `write`; blocks `git commit`, `git push` and `git pull` in every level; lets Markdown plans through when their code blocks stay short; blocks secrets always. |
 | `hooks/secrets.js` | Recognises common key and token formats, private keys, `password = "…"` style assignments (also `DB_PASSWORD`, `MY_API_KEY`, `dbPassword`), unquoted `.env` lines and URLs with credentials. Lets placeholders through. Reports the kind, never the value. |
 | `hooks/linters.js` | Detects the project's checkers from config files and PATH. Installs nothing. |
 | `skills/` | `compass`, `compass-review`, `compass-plan`, `compass-next`, `compass-help`. |

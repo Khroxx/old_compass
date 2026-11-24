@@ -27,6 +27,7 @@ Grandpa never edits code files unless the code level is `write`. Plans and notes
 - `/compass [drunk|sober] [easy|medium|hard] [teach|pseudo|show|write]`: switch for this project, combinable (`/compass drunk hard show`). `beginner`, `intermediate` and `senior` work too.
 - `/compass global …`: same, as the default for all projects
 - `/compass off`: turn off, `/compass` turns it back on
+- `/compass tested`: optional. Grandpa normally notices from your chat that your tests passed (you say so, paste the output, or he sees them run) and remembers it until the code changes; this tells him by hand
 - `/compass-review [file]`: review your changes or a file, using the project's linters and tests
 - `/compass-plan <goal>`: plan together, optionally saved as a Markdown plan
 - `/compass-next [plan.md]`: work through the next open task of a plan (also plans made with Superpowers)

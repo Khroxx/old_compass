@@ -8,6 +8,8 @@
 //     implementations), see MAX_PLAN_CODE_LINES
 // What always gets blocked, in every code level:
 //   - writing anything that looks like a real secret (keys, tokens, passwords)
+//   - `git commit`, `git push` and `git pull`: the user runs git, the agent only
+//     suggests the message and explains the commands
 // What gets blocked unless the code level is "write":
 //   - Write/Edit/MultiEdit/NotebookEdit/apply_patch on anything else
 //   - obvious shell writes to code files (>, >>, tee, sed -i, perl -i)
@@ -16,11 +18,18 @@
 // and Codex both honour it.
 const fs = require('fs');
 const path = require('path');
-const { readState, readStdin, projectDir } = require('./lib');
+const { readState, readTested, writeTested, fingerprint, readStdin, projectDir } = require('./lib');
 const { findSecret } = require('./secrets');
+const { detectCheckers } = require('./linters');
 
 const FILE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'apply_patch']);
 const SHELL_TOOLS = new Set(['Bash', 'shell', 'local_shell']);
+
+// The model runs this when the user says or shows that their tests passed.
+// The rules in instructions.js name the same command. main() sees it and
+// remembers the green for the current code; as a plain echo it is harmless.
+const RECORD_CMD = '`echo "old-compass: tests passed"`';
+const isRecordCmd = (cmd) => /^\s*echo\s+["']?old-compass: tests passed["']?\s*$/.test(cmd);
 
 // Longest fenced code block allowed in a plan before it counts as "finished code".
 const MAX_PLAN_CODE_LINES = 5;
@@ -93,6 +102,17 @@ function shellWriteTarget(cmd) {
   return null;
 }
 
+// Returns 'commit', 'push' or 'pull' when a shell command runs that git
+// subcommand, else null. Only matches where a command starts (line start, or
+// after ; & | or a subshell paren), so `echo "git commit"` and `git log --grep
+// commit` pass. Handles `git -C dir push`, `git -c k=v commit` and `VAR=1 git pull`.
+function gitWriteCommand(cmd) {
+  const m = /(?:^|[;&|(\n])\s*(?:\w+=\S*\s+)*git(?:\s+(?:-[Cc]\s+\S+|--\S+|-\S+))*\s+(commit|push|pull)\b/.exec(cmd || '');
+  return m ? m[1] : null;
+}
+
+const shellCommand = (args) => (Array.isArray(args.command) ? args.command.join(' ') : String(args.command || ''));
+
 // The text a tool call would ADD to the disk. Only new text counts, so editing
 // a file that already holds a secret (say, someone else's .env) isn't blocked
 // for what was already there. Shell commands count only when they write.
@@ -117,10 +137,15 @@ function verdict(input, state) {
   // the agent never puts a real password or key into a file.
   const secret = findSecret(newText(tool, args));
   if (secret) return { target: args.file_path || 'a file', secret };
+
+  // Git is checked before the `write` shortcut below: `write` unlocks code
+  // edits, never commits, pushes or pulls.
+  const git = SHELL_TOOLS.has(tool) && gitWriteCommand(shellCommand(args));
+  if (git) return { target: `git ${git}`, git };
   if (state.code === 'write') return null;
 
   if (SHELL_TOOLS.has(tool)) {
-    const cmd = Array.isArray(args.command) ? args.command.join(' ') : String(args.command || '');
+    const cmd = shellCommand(args);
     if (cmd.includes('*** Begin Patch')) return patchVerdict(cmd);
     const target = shellWriteTarget(cmd);
     return target ? { target } : null;
@@ -138,7 +163,48 @@ function verdict(input, state) {
   return block ? { target: file, block } : null;
 }
 
-function message(v, state) {
+// What the agent should do instead of running git itself: suggest, explain,
+// let the user type it. Each entry is what to teach for that subcommand.
+const GIT_LESSON = {
+  commit: 'Look at the changes yourself first (git status, git diff) and say in a sentence what they do and why. Then suggest ONE commit message: a short imperative subject (about 50 characters, e.g. "Fix off-by-one in cart total"), a blank line, and a body that says why, if the why is not obvious. One logical change per commit: if the diff mixes two things, tell the user to split it with git add <file> or git add -p. Show the commands for the user to type: git status, git add <files>, git diff --staged, git commit -m "<message>".',
+  push: 'Tell the user to check what leaves the machine first: git status, then git log origin/<branch>..HEAD to see the commits that are not on the remote yet. Then they run git push themselves. If the push is rejected, explain why and point at git pull (or git fetch and look first); never suggest --force without explaining what it destroys.',
+  pull: 'Explain that pull is fetch plus merge (or rebase). Suggest the careful route: git fetch, then git log HEAD..origin/<branch> to see what is coming, then git pull --ff-only (or git merge / git rebase if they want to choose). Tell them to commit or stash local changes first.',
+};
+
+// Test-first reminder for commit and push, like a real workplace: nothing
+// leaves the machine untested. Says whether the user's last "/compass tested"
+// still matches the code (fresh), or the code moved on (stale), or never
+// happened. Names the project's own test command when linters.js finds one.
+function testReminder(dir) {
+  const tests = detectCheckers(dir).find((c) => c.name === 'tests');
+  const run = tests ? `\`${tests.cmd}\`` : 'the tests';
+  const rest = ` When the user says or shows that the tests passed (or you saw them pass on the current code), record it by running the shell command ${RECORD_CMD}: Old Compass then remembers it for this exact code. Never record a green you did not hear about or see.` + ' New behaviour or a bug fix should come with a test written first (red, then green, then refactor): if the diff has no test change, point that out. Also have them run the linter, and read the diff once more for leftovers (debug prints, secrets, commented-out code).';
+  const seen = readTested(dir);
+  const now = fingerprint(dir);
+  if (seen && seen.fingerprint && seen.fingerprint === now) {
+    const mins = Math.max(0, Math.round((Date.now() - seen.at) / 60000));
+    return `Tests: the user said they passed ${mins} min ago and nothing has changed since. Do not ask them to run them again; say so in your voice and go on.` + rest;
+  }
+  if (seen) {
+    return `Tests: the user said they passed earlier, but the code has changed since. That green is stale. Tell them to run ${run} again. Once they tell you it is green, record it (see below).` + rest;
+  }
+  const none = tests ? '' : ' No test command was detected in this project: say so (no test command found), and ask the user to write a test for the change before committing.';
+  return `Test first. The user has not tested yet.${none} ${tests ? `Tell them to run ${run}` : 'Once there is a test, tell them to run it'} and only continue once it is green. If they did not run it, say so plainly.` + rest;
+}
+
+function gitMessage(kind, drunk, dir) {
+  return [
+    drunk
+      ? `GIT ${kind.toUpperCase()}? THAT'S YOUR JOB, RECRUIT. Type it yourself.`
+      : `Git ${kind} is your job, kiddo, not mine. Your hands should know these commands.`,
+    `Blocked by Old Compass (git ${kind}). This applies in every code level, /compass write included. Do not run it another way (no scripts, no aliases, no -c tricks).`,
+    kind === 'pull' ? '' : testReminder(dir),
+    GIT_LESSON[kind],
+    'Explain the commands with an everyday analogy (a commit is a labelled box in the attic, a push is posting that box to the shared archive, a pull is collecting the post). Adjust the depth to the level: easy = one command at a time and say what each does, hard = just the commands and the message. The user types them and reports back.',
+  ].filter(Boolean).join('\n');
+}
+
+function message(v, state, dir) {
   const drunk = state.persona === 'drunk';
   if (v.secret) {
     // Name the kind of secret only, never its value: this text goes back to the model.
@@ -150,6 +216,7 @@ function message(v, state) {
       'Do not repeat the value anywhere. Use a placeholder such as process.env.NAME or <YOUR_KEY> instead, and tell the user where the real value belongs (environment variable, .env kept out of git, secret manager) so they put it there themselves.',
     ].join('\n');
   }
+  if (v.git) return gitMessage(v.git, drunk, dir);
   if (v.block) {
     return [
       drunk
@@ -173,9 +240,12 @@ function message(v, state) {
 // `node -e "require(...)"`, where require.main is not this module.
 function main() {
   return readStdin().then((input) => {
-    const v = verdict(input, readState(projectDir(input)));
+    const dir = projectDir(input);
+    const state = readState(dir);
+    if (state.enabled && SHELL_TOOLS.has(input.tool_name) && isRecordCmd(shellCommand(input.tool_input || {}))) writeTested(dir);
+    const v = verdict(input, state);
     if (!v) process.exit(0);
-    process.stderr.write(message(v, readState(projectDir(input))));
+    process.stderr.write(message(v, state, dir));
     process.exit(2);
   });
 }
